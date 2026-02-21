@@ -41,10 +41,21 @@ class TestParseCsvContent:
         with pytest.raises(CSVParseError):
             parse_csv_content(WHITESPACE_CSV, "whitespace.csv")
 
-    def test_missing_required_columns_raises_error(self):
-        """Should raise CSVParseError when required columns are missing."""
+    def test_missing_columns_raises_error(self):
+        """Should raise CSVParseError if required columns are missing."""
         with pytest.raises(CSVParseError, match="missing required columns"):
-            parse_csv_content(MISSING_COLUMNS_CSV, "missing.csv")
+            parse_csv_content(MISSING_COLUMNS_CSV, "test.csv")
+
+    def test_reconciliation_difference_is_filtered(self):
+        """Should ignore rows with description containing 'RECONCILIATION_DIFFERENCE'."""
+        csv_data = (
+            b"amount|date|description|installments|category\n"
+            b"10.0|2024-01-01|Valid record|1/1|cat\n"
+            b'20.0|2024-01-01|"||RECONCILIATION_DIFFERENCE|0.9||"|1/1|cat\n'
+        )
+        records = parse_csv_content(csv_data, "test.csv")
+        assert len(records) == 1
+        assert records[0].description == "Valid record"
 
     def test_malformed_row_is_skipped(self):
         """Should skip rows with invalid data and continue parsing."""

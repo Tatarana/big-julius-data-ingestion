@@ -54,6 +54,13 @@ def parse_csv_content(content: bytes, source_file: str) -> List[Transaction]:
     for i, row in enumerate(reader, start=2):  # row 1 is the header
         # Normalize keys
         normalized_row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
+        description = normalized_row.get("description", "")
+
+        # Skip specific records requested by the user
+        if "RECONCILIATION_DIFFERENCE" in description.upper():
+            logger.debug("Skipping reconciliation record at row %d.", i)
+            continue
+
         try:
             # Map 'amount' to 'value' and 'installments' to 'installment'
             value = _parse_float(normalized_row.get("amount", ""))
