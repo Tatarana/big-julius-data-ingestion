@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: big-julius-data-ingestion
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount the Google service account credentials file into the container
+      - ${GOOGLE_APPLICATION_CREDENTIALS}:/credentials/service-account.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/credentials/service-account.json
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
