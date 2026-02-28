@@ -31,7 +31,7 @@ class TestIngestionServiceRun:
 
         # Provide one CSV file with one record
         s3_service.list_csv_files.return_value = ["prefix/test.csv"]
-        s3_service.download_file.return_value = ("test.csv", b"value,date,description,installment\n100.0,2024-01-15,Test,1/1\n")
+        s3_service.download_file.return_value = ("test.csv", b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n100.0|2024-01-15|Test|1/1|cat|b|doc|own|date\n")
         firestore_service.bulk_insert_temp.return_value = None
         firestore_service.exists_in_main.return_value = False
         firestore_service.insert_into_main.return_value = True
@@ -52,7 +52,7 @@ class TestIngestionServiceRun:
         firestore_service = MagicMock()
 
         s3_service.list_csv_files.return_value = ["prefix/test.csv"]
-        s3_service.download_file.return_value = ("test.csv", b"value,date,description,installment\n100.0,2024-01-15,Test,1/1\n")
+        s3_service.download_file.return_value = ("test.csv", b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n100.0|2024-01-15|Test|1/1|cat|b|doc|own|date\n")
         firestore_service.bulk_insert_temp.return_value = None
         firestore_service.exists_in_main.return_value = True  # Duplicate!
         firestore_service.delete_all_temp.return_value = None
@@ -89,7 +89,7 @@ class TestIngestionServiceRun:
         s3_service.list_csv_files.return_value = ["bad.csv", "good.csv"]
         s3_service.download_file.side_effect = [
             ("bad.csv", b""),  # Empty = malformed
-            ("good.csv", b"value,date,description,installment\n50.0,2024-01-15,desc,1/1\n"),
+            ("good.csv", b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n50.0|2024-01-15|desc|1/1|cat|b|doc|own|date\n"),
         ]
         firestore_service.bulk_insert_temp.return_value = None
         firestore_service.exists_in_main.return_value = False
@@ -109,7 +109,7 @@ class TestIngestionServiceRun:
         firestore_service = MagicMock()
 
         s3_service.list_csv_files.return_value = ["f.csv"]
-        s3_service.download_file.return_value = ("f.csv", b"value,date,description,installment\n10.0,2024-01-01,d,1/1\n")
+        s3_service.download_file.return_value = ("f.csv", b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n10.0|2024-01-01|d|1/1|cat|b|doc|own|date\n")
         firestore_service.bulk_insert_temp.return_value = None
         firestore_service.exists_in_main.return_value = False
         firestore_service.insert_into_main.return_value = False  # Insert fails

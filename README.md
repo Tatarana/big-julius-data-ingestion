@@ -150,6 +150,11 @@ Each CSV file must contain the following columns (case-insensitive):
 | `date` | string (YYYY-MM-DD) | `2024-01-15` |
 | `description` | string | `Supermarket` |
 | `installments` | string | `1/4` |
+| `bank` | string | `Nubank` |
+| `doc_type` | string | `conta corrente` |
+| `owner` | string | `Fernando` |
+| `extraction_date` | string (YYYY-MM-DD) | `2024-01-16` |
+| `category` | string | `Food` |
 
 *Note: Files must be pipe-delimited (`|`).*
 

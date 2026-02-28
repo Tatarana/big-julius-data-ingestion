@@ -9,7 +9,7 @@ from app.models.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
-REQUIRED_COLUMNS = {"amount", "date", "description", "installments", "category"}
+REQUIRED_COLUMNS = {"amount", "date", "description", "installments", "category", "bank", "doc_type", "owner", "extraction_date"}
 
 
 class CSVParseError(Exception):
@@ -64,11 +64,32 @@ def parse_csv_content(content: bytes, source_file: str) -> List[Transaction]:
         try:
             # Map 'amount' to 'value' and 'installments' to 'installment'
             value = _parse_float(normalized_row.get("amount", ""))
+            
+            # Transformations for new fields
+            bank = normalized_row.get("bank", "").title()
+            
+            doc_type_raw = normalized_row.get("doc_type", "").lower()
+            if doc_type_raw == "bank statement":
+                doc_type = "conta corrente"
+            elif doc_type_raw == "credit card statement":
+                doc_type = "cartão de crédito"
+            else:
+                doc_type = normalized_row.get("doc_type", "")
+                
+            owner_raw = normalized_row.get("owner", "")
+            owner = owner_raw.split()[0].title() if owner_raw else ""
+            
+            extraction_date = normalized_row.get("extraction_date", "")
+
             transaction = Transaction(
                 value=value,
                 date=normalized_row["date"],
                 description=normalized_row["description"],
                 installment=normalized_row["installments"],
+                bank=bank,
+                doc_type=doc_type,
+                owner=owner,
+                extraction_date=extraction_date,
                 category=normalized_row.get("category"),
                 source_file=source_file,
             )
