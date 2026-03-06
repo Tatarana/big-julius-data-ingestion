@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from app.core.logging import configure_logging, get_logger
+from app.routers.classification_rules import router as classification_rules_router
 from app.routers.ingestion import router as ingestion_router
 
 configure_logging("INFO")
@@ -43,6 +44,7 @@ app = FastAPI(
 )
 
 app.include_router(ingestion_router, prefix="", tags=["Ingestion"])
+app.include_router(classification_rules_router, prefix="", tags=["Classification Rules"])
 
 
 @app.get(

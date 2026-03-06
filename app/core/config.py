@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     firestore_database_id: str = "(default)"
     collection_main: str = "transactions"
     collection_temp: str = "transactions_temp"
+    collection_rules: str = "classification_rules"
     log_level: str = "INFO"
 
 

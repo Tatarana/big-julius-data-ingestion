@@ -156,6 +156,8 @@ Each CSV file must contain the following columns (case-insensitive):
 | `extraction_date` | string (YYYY-MM-DD) | `2024-01-16` |
 | `category` | string | `Food` |
 
+`settlement_period` is a **calculated field** (not present in the CSV). It is computed during ingestion in `MM-YYYY` format, representing when the transaction is actually settled. For credit card installments, it offsets the purchase date by the installment number.
+
 *Note: Files must be pipe-delimited (`|`).*
 
 Additional columns are ignored. Malformed rows are skipped; malformed files are skipped entirely (the endpoint will **not** return 500 due to a single bad file).

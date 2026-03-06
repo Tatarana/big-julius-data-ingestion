@@ -30,15 +30,17 @@ class TestParseCsvContent:
         assert records[0].bank == "Nubank"
         assert records[0].doc_type == "conta corrente"
         assert records[0].owner == "Fernando"
-        assert records[0].extraction_date == "2024-01-16"
+        assert records[0].extraction_date == "16-01-2024"
         assert records[0].source_file == "test.csv"
+        assert records[0].settlement_period == "01-2024"
         
         assert records[1].category == "Transport"
         assert records[1].value == -50.00
         assert records[1].bank == "Itau"
         assert records[1].doc_type == "cartão de crédito"
         assert records[1].owner == "Joao"
-        assert records[1].extraction_date == "2024-01-17"
+        assert records[1].extraction_date == "17-01-2024"
+        assert records[1].settlement_period == "02-2024"
 
     def test_empty_file_raises_error(self):
         """Should raise CSVParseError for an empty file."""
@@ -83,3 +85,76 @@ class TestParseCsvContent:
         records = parse_csv_content(BOM_CSV, "bom.csv")
         assert len(records) == 1
         assert records[0].value == 75.00
+
+    def test_outros_category_sets_pending_review_status(self):
+        """Should set classification_review_status to 'pending' for 'outros' category."""
+        csv_data = (
+            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n"
+            b"10.0|2024-01-01|Test|1/1|outros|b|doc|own|date\n"
+        )
+        records = parse_csv_content(csv_data, "test.csv")
+        assert len(records) == 1
+        assert records[0].classification_review_status == "pending"
+
+    def test_outros_case_insensitive_sets_pending(self):
+        """Should handle 'Outros' case-insensitively."""
+        csv_data = (
+            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n"
+            b"10.0|2024-01-01|Test|1/1|Outros|b|doc|own|date\n"
+        )
+        records = parse_csv_content(csv_data, "test.csv")
+        assert records[0].classification_review_status == "pending"
+
+    def test_non_outros_category_has_no_review_status(self):
+        """Should leave classification_review_status as None for non-outros categories."""
+        csv_data = (
+            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n"
+            b"10.0|2024-01-01|Test|1/1|Food|b|doc|own|date\n"
+        )
+        records = parse_csv_content(csv_data, "test.csv")
+        assert records[0].classification_review_status is None
+
+    def test_settlement_period_credit_card_installments(self):
+        """Credit card installment 3/5 with date 2024-01-15 should settle in 03-2024."""
+        csv_data = (
+            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n"
+            b"100.0|2024-01-15|Purchase|3/5|Shopping|b|credit card statement|own|date\n"
+        )
+        records = parse_csv_content(csv_data, "test.csv")
+        assert records[0].settlement_period == "03-2024"
+
+    def test_settlement_period_credit_card_single_payment(self):
+        """Credit card 1/1 should settle in the same month as the date."""
+        csv_data = (
+            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n"
+            b"50.0|2024-06-20|Coffee|1/1|Food|b|credit card statement|own|date\n"
+        )
+        records = parse_csv_content(csv_data, "test.csv")
+        assert records[0].settlement_period == "06-2024"
+
+    def test_settlement_period_bank_statement(self):
+        """Conta corrente should settle in the same month as the date."""
+        csv_data = (
+            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n"
+            b"200.0|2024-03-10|Transfer|1/1|Transfer|b|bank statement|own|date\n"
+        )
+        records = parse_csv_content(csv_data, "test.csv")
+        assert records[0].settlement_period == "03-2024"
+
+    def test_settlement_period_year_boundary_rollover(self):
+        """Installment crossing year boundary: date 2024-11-15, 3/5 -> 01-2025."""
+        csv_data = (
+            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n"
+            b"300.0|2024-11-15|Electronics|3/5|Shopping|b|credit card statement|own|date\n"
+        )
+        records = parse_csv_content(csv_data, "test.csv")
+        assert records[0].settlement_period == "01-2025"
+
+    def test_settlement_period_dd_mm_yyyy_format(self):
+        """Should correctly parse DD-MM-YYYY date format for settlement_period."""
+        csv_data = (
+            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n"
+            b"100.0|28-12-2024|Purchase|3/5|Shopping|b|credit card statement|own|date\n"
+        )
+        records = parse_csv_content(csv_data, "test.csv")
+        assert records[0].settlement_period == "02-2025"

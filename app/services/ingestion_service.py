@@ -36,11 +36,13 @@ class IngestionService:
             1. Read CSV files from S3.
             2. Write all parsed records to the temporary Firestore collection (B).
             3. Deduplicate against the main collection (A) and insert new records.
-            4. Clean up the temporary collection (B).
-            5. Return the ingestion summary.
+            4. Reclassify pending "outros" transactions using classification rules.
+            5. Clean up the temporary collection (B).
+            6. Return the ingestion summary.
 
         Returns:
-            An IngestionResponse with counts of read, inserted, and discarded records.
+            An IngestionResponse with counts of read, inserted, discarded,
+            and reclassified records.
 
         Raises:
             S3ServiceError: If the S3 bucket or prefix is inaccessible.
@@ -56,6 +58,7 @@ class IngestionService:
                 total_read=0,
                 total_inserted=0,
                 total_discarded=0,
+                total_reclassified=0,
                 status="success",
             )
 
@@ -67,20 +70,25 @@ class IngestionService:
         # Step 3: Deduplication
         total_inserted, total_discarded = self._deduplicate_and_insert(all_transactions)
 
-        # Step 4: Cleanup temp collection
+        # Step 4: Reclassify pending transactions
+        total_reclassified = self.reclassify_pending()
+
+        # Step 5: Cleanup temp collection
         self._firestore.delete_all_temp()
 
-        # Step 5: Return response
+        # Step 6: Return response
         logger.info(
-            "Ingestion complete — read: %d, inserted: %d, discarded: %d.",
+            "Ingestion complete — read: %d, inserted: %d, discarded: %d, reclassified: %d.",
             total_read,
             total_inserted,
             total_discarded,
+            total_reclassified,
         )
         return IngestionResponse(
             total_read=total_read,
             total_inserted=total_inserted,
             total_discarded=total_discarded,
+            total_reclassified=total_reclassified,
             status="success",
         )
 
@@ -133,3 +141,58 @@ class IngestionService:
                     logger.error("Failed to insert transaction: %s", dedup_key)
 
         return inserted, discarded
+
+    def reclassify_pending(self) -> int:
+        """Apply classification rules to all pending transactions.
+
+        For each transaction with classification_review_status == "pending":
+        1. Check if any rule's description is a case-insensitive substring match.
+        2. If matched (longest match wins), update category to the rule's manual_category.
+        3. Mark classification_review_status as "reviewed" regardless.
+
+        Returns:
+            The number of transactions whose category was actually changed.
+        """
+        rules = self._firestore.get_all_rules()
+        if not rules:
+            logger.info("No classification rules found. Marking all pending as reviewed.")
+
+        pending = self._firestore.get_pending_transactions()
+        if not pending:
+            logger.info("No pending transactions to reclassify.")
+            return 0
+
+        # Sort rules by description length descending (longest match wins)
+        sorted_rules = sorted(rules, key=lambda r: len(r.get("description", "")), reverse=True)
+
+        reclassified = 0
+        for txn in pending:
+            doc_id = txn["_doc_id"]
+            txn_description = (txn.get("description") or "").lower()
+
+            matched_rule = None
+            for rule in sorted_rules:
+                rule_desc = (rule.get("description") or "").lower()
+                if rule_desc and rule_desc in txn_description:
+                    matched_rule = rule
+                    break  # First match is the longest due to sorting
+
+            if matched_rule:
+                self._firestore.update_transaction(doc_id, {
+                    "category": matched_rule["manual_category"],
+                    "classification_review_status": "reviewed",
+                })
+                reclassified += 1
+                logger.debug(
+                    "Reclassified transaction '%s': '%s' -> '%s'",
+                    doc_id,
+                    txn.get("description"),
+                    matched_rule["manual_category"],
+                )
+            else:
+                self._firestore.update_transaction(doc_id, {
+                    "classification_review_status": "reviewed",
+                })
+
+        logger.info("Reclassification complete: %d of %d pending transactions updated.", reclassified, len(pending))
+        return reclassified

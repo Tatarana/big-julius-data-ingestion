@@ -41,6 +41,7 @@ def get_ingestion_service() -> IngestionService:
         client=firestore_client,
         main_collection=settings.collection_main,
         temp_collection=settings.collection_temp,
+        rules_collection=settings.collection_rules,
     )
     return IngestionService(s3_service=s3_service, firestore_service=firestore_service)
 

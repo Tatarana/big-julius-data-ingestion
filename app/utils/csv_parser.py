@@ -3,7 +3,7 @@
 import csv
 import io
 import logging
-from typing import List
+from typing import List, Optional
 
 from app.models.transaction import Transaction
 
@@ -79,7 +79,19 @@ def parse_csv_content(content: bytes, source_file: str) -> List[Transaction]:
             owner_raw = normalized_row.get("owner", "")
             owner = owner_raw.split()[0].title() if owner_raw else ""
             
-            extraction_date = normalized_row.get("extraction_date", "")
+            extraction_date_raw = normalized_row.get("extraction_date", "")
+            extraction_date = _normalize_date_to_ddmmyyyy(extraction_date_raw)
+
+            category = normalized_row.get("category")
+            classification_review_status = (
+                "pending" if category and category.strip().lower() == "outros" else None
+            )
+
+            settlement_period = _calculate_settlement_period(
+                normalized_row["date"],
+                normalized_row["installments"],
+                doc_type,
+            )
 
             transaction = Transaction(
                 value=value,
@@ -90,7 +102,9 @@ def parse_csv_content(content: bytes, source_file: str) -> List[Transaction]:
                 doc_type=doc_type,
                 owner=owner,
                 extraction_date=extraction_date,
-                category=normalized_row.get("category"),
+                settlement_period=settlement_period,
+                category=category,
+                classification_review_status=classification_review_status,
                 source_file=source_file,
             )
             transactions.append(transaction)
@@ -126,3 +140,74 @@ def _parse_float(raw: str) -> float:
     if not cleaned:
         raise ValueError("Empty value field.")
     return float(cleaned)
+
+
+def _calculate_settlement_period(
+    date_str: str, installment: str, doc_type: str
+) -> Optional[str]:
+    """Calculate the settlement period (MM-YYYY) for a transaction.
+
+    For credit card transactions with installments, the settlement period is
+    the purchase month plus (current_installment - 1) months.
+    For all other transactions, it is simply the month/year of the date.
+
+    Args:
+        date_str: Transaction date in YYYY-MM-DD or DD-MM-YYYY format.
+        installment: Installment string, e.g. '3/5'.
+        doc_type: Document type (already transformed, e.g. 'cartão de crédito').
+
+    Returns:
+        Settlement period as 'MM-YYYY', or None if the date cannot be parsed.
+    """
+    try:
+        parts = date_str.strip().split("-")
+        if len(parts[0]) == 4:
+            # YYYY-MM-DD
+            year = int(parts[0])
+            month = int(parts[1])
+        else:
+            # DD-MM-YYYY
+            year = int(parts[2])
+            month = int(parts[1])
+    except (IndexError, ValueError):
+        logger.warning("Cannot parse date '%s' for settlement_period calculation.", date_str)
+        return None
+
+    months_to_add = 0
+    if doc_type == "cartão de crédito" and installment:
+        try:
+            current, _ = installment.split("/")
+            months_to_add = int(current) - 1
+        except (ValueError, AttributeError):
+            logger.warning(
+                "Cannot parse installment '%s' for settlement_period calculation.", installment
+            )
+
+    total_months = (year * 12 + month - 1) + months_to_add
+    result_year = total_months // 12
+    result_month = (total_months % 12) + 1
+
+    return f"{result_month:02d}-{result_year}"
+
+
+def _normalize_date_to_ddmmyyyy(date_str: str) -> str:
+    """Convert a date string to DD-MM-YYYY format.
+
+    If already in DD-MM-YYYY, returns as-is. If in YYYY-MM-DD, converts it.
+
+    Args:
+        date_str: Date string in YYYY-MM-DD or DD-MM-YYYY format.
+
+    Returns:
+        Date string in DD-MM-YYYY format, or the original string if unparseable.
+    """
+    stripped = date_str.strip()
+    if not stripped:
+        return stripped
+
+    parts = stripped.split("-")
+    if len(parts) == 3 and len(parts[0]) == 4:
+        # YYYY-MM-DD → DD-MM-YYYY
+        return f"{parts[2]}-{parts[1]}-{parts[0]}"
+
+    return stripped

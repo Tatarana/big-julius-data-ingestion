@@ -28,6 +28,7 @@ class FirestoreService:
         _client: The injectable Firestore client.
         _main_collection: Name of the main transactions collection.
         _temp_collection: Name of the temporary staging collection.
+        _rules_collection: Name of the classification rules collection.
     """
 
     def __init__(
@@ -35,6 +36,7 @@ class FirestoreService:
         client: FirestoreClientProtocol,
         main_collection: str,
         temp_collection: str,
+        rules_collection: str = "classification_rules",
     ) -> None:
         """Initialize the FirestoreService.
 
@@ -42,10 +44,12 @@ class FirestoreService:
             client: An injectable Firestore client (or mock).
             main_collection: Name of the main Firestore collection.
             temp_collection: Name of the temporary Firestore collection.
+            rules_collection: Name of the classification rules collection.
         """
         self._client = client
         self._main_collection = main_collection
         self._temp_collection = temp_collection
+        self._rules_collection = rules_collection
 
     def bulk_insert_temp(self, records: List[Dict[str, Any]]) -> None:
         """Bulk-insert transaction records into the temporary collection.
@@ -139,6 +143,62 @@ class FirestoreService:
         """
         docs = self._client.collection(self._temp_collection).stream()
         return [{"_doc_id": doc.id, **doc.to_dict()} for doc in docs]
+
+    # --- Classification rules methods ---
+
+    def get_all_rules(self) -> List[Dict[str, Any]]:
+        """Retrieve all classification rules.
+
+        Returns:
+            A list of dicts with 'description' and 'manual_category' fields.
+        """
+        docs = self._client.collection(self._rules_collection).stream()
+        return [{"_doc_id": doc.id, **doc.to_dict()} for doc in docs]
+
+    def add_rule(self, rule: Dict[str, Any]) -> str:
+        """Insert a new classification rule.
+
+        Args:
+            rule: Dict with 'description' and 'manual_category'.
+
+        Returns:
+            The Firestore document ID of the newly created rule.
+        """
+        try:
+            _, doc_ref = self._client.collection(self._rules_collection).add(rule)
+            logger.info("Added classification rule: %s -> %s", rule.get("description"), rule.get("manual_category"))
+            return doc_ref.id
+        except Exception as exc:
+            logger.error("Failed to add classification rule: %s", exc, exc_info=True)
+            raise FirestoreServiceError("Failed to add classification rule.") from exc
+
+    def get_pending_transactions(self) -> List[Dict[str, Any]]:
+        """Retrieve all transactions with classification_review_status == 'pending'.
+
+        Returns:
+            A list of dicts including '_doc_id' for each pending transaction.
+        """
+        query = (
+            self._client.collection(self._main_collection)
+            .where("classification_review_status", "==", "pending")
+        )
+        docs = list(query.stream())
+        return [{"_doc_id": doc.id, **doc.to_dict()} for doc in docs]
+
+    def update_transaction(self, doc_id: str, updates: Dict[str, Any]) -> None:
+        """Update specific fields on a transaction document in the main collection.
+
+        Args:
+            doc_id: Firestore document ID.
+            updates: Dict of field names and their new values.
+        """
+        try:
+            doc_ref = self._client.collection(self._main_collection).document(doc_id)
+            doc_ref.update(updates)
+            logger.debug("Updated transaction '%s': %s", doc_id, updates)
+        except Exception as exc:
+            logger.error("Failed to update transaction '%s': %s", doc_id, exc, exc_info=True)
+            raise FirestoreServiceError(f"Failed to update transaction {doc_id}.") from exc
 
 
 def build_firestore_client(
