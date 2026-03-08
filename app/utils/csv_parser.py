@@ -9,7 +9,7 @@ from app.models.transaction import Transaction
 
 logger = logging.getLogger(__name__)
 
-REQUIRED_COLUMNS = {"amount", "date", "description", "installments", "category", "bank", "doc_type", "owner", "extraction_date"}
+REQUIRED_COLUMNS = {"amount", "date", "description", "installments", "category", "bank", "doc_type", "owner", "extraction_date", "payment_date"}
 
 
 class CSVParseError(Exception):
@@ -82,6 +82,9 @@ def parse_csv_content(content: bytes, source_file: str) -> List[Transaction]:
             extraction_date_raw = normalized_row.get("extraction_date", "")
             extraction_date = _normalize_date_to_ddmmyyyy(extraction_date_raw)
 
+            payment_date_raw = normalized_row.get("payment_date", "")
+            payment_date = _normalize_date_to_ddmmyyyy(payment_date_raw) if payment_date_raw else None
+
             category = normalized_row.get("category")
             classification_review_status = (
                 "pending" if category and category.strip().lower() == "outros" else None
@@ -102,6 +105,7 @@ def parse_csv_content(content: bytes, source_file: str) -> List[Transaction]:
                 doc_type=doc_type,
                 owner=owner,
                 extraction_date=extraction_date,
+                payment_date=payment_date,
                 settlement_period=settlement_period,
                 category=category,
                 classification_review_status=classification_review_status,

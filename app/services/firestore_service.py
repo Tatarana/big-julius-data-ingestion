@@ -172,6 +172,41 @@ class FirestoreService:
             logger.error("Failed to add classification rule: %s", exc, exc_info=True)
             raise FirestoreServiceError("Failed to add classification rule.") from exc
 
+    def update_rule(self, doc_id: str, updates: Dict[str, Any]) -> None:
+        """Update a classification rule by document ID.
+
+        Args:
+            doc_id: Firestore document ID of the rule.
+            updates: Dict of field names and their new values.
+
+        Raises:
+            FirestoreServiceError: If the update fails.
+        """
+        try:
+            doc_ref = self._client.collection(self._rules_collection).document(doc_id)
+            doc_ref.update(updates)
+            logger.info("Updated classification rule '%s': %s", doc_id, updates)
+        except Exception as exc:
+            logger.error("Failed to update classification rule '%s': %s", doc_id, exc, exc_info=True)
+            raise FirestoreServiceError(f"Failed to update classification rule {doc_id}.") from exc
+
+    def delete_rule(self, doc_id: str) -> None:
+        """Delete a classification rule by document ID.
+
+        Args:
+            doc_id: Firestore document ID of the rule.
+
+        Raises:
+            FirestoreServiceError: If the deletion fails.
+        """
+        try:
+            doc_ref = self._client.collection(self._rules_collection).document(doc_id)
+            doc_ref.delete()
+            logger.info("Deleted classification rule '%s'.", doc_id)
+        except Exception as exc:
+            logger.error("Failed to delete classification rule '%s': %s", doc_id, exc, exc_info=True)
+            raise FirestoreServiceError(f"Failed to delete classification rule {doc_id}.") from exc
+
     def get_pending_transactions(self) -> List[Dict[str, Any]]:
         """Retrieve all transactions with classification_review_status == 'pending'.
 

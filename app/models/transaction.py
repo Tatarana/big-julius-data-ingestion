@@ -28,6 +28,7 @@ class Transaction(BaseModel):
     doc_type: str = Field(..., description="Document type.")
     owner: str = Field(..., description="Owner's first name.")
     extraction_date: str = Field(..., description="Date the data was extracted.")
+    payment_date: Optional[str] = Field(None, description="Payment date in DD-MM-YYYY format.")
     settlement_period: Optional[str] = Field(
         None,
         description="Settlement period in MM-YYYY format. Calculated from date and installment for credit card transactions.",

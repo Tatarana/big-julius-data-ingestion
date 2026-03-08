@@ -8,12 +8,12 @@ const DATABASE_NAME   = 'big-julius-firestore' // nome do database
 // Ordem das colunas na planilha
 const HEADERS = [
   'bank', 'category', 'date', 'description',
-  'doc_type', 'installment', 'owner', 'settlement_period',
-  'value', 'extraction_date', 'source_file'
+  'doc_type', 'installment', 'owner', 'payment_date',
+  'settlement_period', 'value', 'extraction_date', 'source_file'
 ];
 
 // Campos ignorados na deduplicação (conforme solicitado)
-const DEDUP_EXCLUDE = ['category', 'settlement_period', 'extraction_date', 'source_file'];
+const DEDUP_EXCLUDE = ['category', 'payment_date', 'settlement_period', 'extraction_date', 'source_file'];
 const DEDUP_FIELDS  = HEADERS.filter(h => !DEDUP_EXCLUDE.includes(h));
 // → ['bank', 'date', 'description', 'doc_type', 'installment', 'owner', 'value']
 
@@ -108,18 +108,25 @@ function fetchAllDocuments(token) {
 
 
 // ============================================================
-// 📅 FILTRA DOCUMENTOS PELO MÊS/ANO (campo settlement_period: "MM-YYYY")
+// 📅 FILTRA DOCUMENTOS PELO MÊS/ANO
+//    Cartão de crédito → usa payment_date
+//    Conta corrente    → usa date (não possui payment_date)
 // ============================================================
 function filterByMonthYear(documents, month, year) {
-  const target = `${month}-${year}`; // ex: "02-2026"
-
   return documents.filter(doc => {
-    const fields    = doc.fields || {};
-    const periodStr = extractValue(fields['settlement_period']); // "MM-YYYY"
+    const fields      = doc.fields || {};
+    const paymentDate = extractValue(fields['payment_date']); // "DD-MM-YYYY" ou vazio
+    const dateStr     = (paymentDate && typeof paymentDate === 'string')
+                          ? paymentDate
+                          : extractValue(fields['date']);      // fallback p/ conta corrente
 
-    if (!periodStr || typeof periodStr !== 'string') return false;
+    if (!dateStr || typeof dateStr !== 'string') return false;
 
-    return periodStr === target;
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return false;
+
+    const [, mm, yyyy] = parts;
+    return mm === month && yyyy === year;
   });
 }
 
@@ -157,6 +164,15 @@ function writeToSheet(documents) {
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(HEADERS);
     formatHeader(sheet);
+  } else {
+    // Se os cabeçalhos mudaram (ex: nova coluna), limpa e recria
+    const currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (JSON.stringify(currentHeaders) !== JSON.stringify(HEADERS)) {
+      Logger.log('⚠️ Cabeçalhos mudaram — limpando planilha para evitar desalinhamento.');
+      sheet.clear();
+      sheet.appendRow(HEADERS);
+      formatHeader(sheet);
+    }
   }
 
   // Carrega chaves de deduplicação dos dados já existentes na planilha
@@ -178,7 +194,18 @@ function writeToSheet(documents) {
   // Inserção em batch (muito mais rápido que appendRow em loop)
   if (newRows.length > 0) {
     const startRow = sheet.getLastRow() + 1;
-    sheet.getRange(startRow, 1, newRows.length, HEADERS.length).setValues(newRows);
+    const range = sheet.getRange(startRow, 1, newRows.length, HEADERS.length);
+    range.setValues(newRows);
+
+    // Formata apenas colunas de data como texto para impedir auto-conversão,
+    // preservando o tipo numérico do campo value.
+    const DATE_COLUMNS = ['date', 'payment_date', 'settlement_period', 'extraction_date'];
+    DATE_COLUMNS.forEach(col => {
+      const colIndex = HEADERS.indexOf(col) + 1; // 1-based
+      if (colIndex > 0) {
+        sheet.getRange(startRow, colIndex, newRows.length, 1).setNumberFormat('@');
+      }
+    });
   }
 
   return newRows.length;
@@ -194,13 +221,17 @@ function getExistingKeys(sheet) {
 
   if (lastRow <= 1) return keys; // vazia ou só cabeçalho
 
+  // Lê o cabeçalho real da planilha para mapear colunas corretamente,
+  // mesmo que HEADERS tenha mudado desde a última importação.
+  const sheetHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
   const data = sheet
-    .getRange(2, 1, lastRow - 1, HEADERS.length)
-    .getValues();
+    .getRange(2, 1, lastRow - 1, sheet.getLastColumn())
+    .getValues();  // getValues() mantém os tipos originais (números, strings)
 
   data.forEach(row => {
     const obj = {};
-    HEADERS.forEach((h, i) => { obj[h] = row[i]; });
+    sheetHeaders.forEach((h, i) => { obj[h] = row[i]; });
     keys.add(buildDedupKey(obj));
   });
 
@@ -229,8 +260,28 @@ function buildDedupKey(rowOrObj) {
   }
 
   return DEDUP_FIELDS
-    .map(f => String(obj[f] ?? '').trim())
+    .map(f => normalizeValue(obj[f]))
     .join('||');
+}
+
+
+// ============================================================
+// 🔄 NORMALIZA UM VALOR PARA COMPARAÇÃO CONSISTENTE
+//    Garante que Date objects (auto-convertidos pelo Sheets)
+//    sejam revertidos para o formato DD-MM-YYYY original.
+// ============================================================
+function normalizeValue(val) {
+  if (val == null) return '';
+
+  // Date objects criados por auto-conversão do Sheets
+  if (val instanceof Date) {
+    const dd   = String(val.getDate()).padStart(2, '0');
+    const mm   = String(val.getMonth() + 1).padStart(2, '0');
+    const yyyy = val.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  }
+
+  return String(val).trim();
 }
 
 

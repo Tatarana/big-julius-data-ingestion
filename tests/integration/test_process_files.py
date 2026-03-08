@@ -10,8 +10,8 @@ from app.main import app
 from app.routers.ingestion import get_ingestion_service
 
 
-VALID_CSV_CONTENT = b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n100.0|2024-01-15|Supermarket|1/1|Food|nubank|bank statement|FERNANDO SILVA|2024-01-16\n-50.0|2024-01-16|Gas|2/4|Transport|itau|credit card statement|joao pessoa|2024-01-17\n"
-DUPLICATE_CSV_CONTENT = b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date\n100.0|2024-01-15|Supermarket|1/1|Food|nubank|bank statement|FERNANDO SILVA|2024-01-16\n"
+VALID_CSV_CONTENT = b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date|payment_date\n100.0|2024-01-15|Supermarket|1/1|Food|nubank|bank statement|FERNANDO SILVA|2024-01-16|2024-01-15\n-50.0|2024-01-16|Gas|2/4|Transport|itau|credit card statement|joao pessoa|2024-01-17|2024-02-10\n"
+DUPLICATE_CSV_CONTENT = b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date|payment_date\n100.0|2024-01-15|Supermarket|1/1|Food|nubank|bank statement|FERNANDO SILVA|2024-01-16|2024-01-15\n"
 EMPTY_CSV_CONTENT = b""
 
 

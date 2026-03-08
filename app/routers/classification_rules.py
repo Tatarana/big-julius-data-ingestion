@@ -110,3 +110,72 @@ def list_classification_rules(
         )
         for r in rules
     ]
+
+
+@router.put(
+    "/classification-rules/{rule_id}",
+    response_model=ClassificationRuleResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update a classification rule",
+    description="Updates an existing classification rule by its Firestore document ID.",
+)
+def update_classification_rule(
+    rule_id: str,
+    rule: ClassificationRule,
+    firestore: FirestoreService = Depends(get_firestore_service),
+) -> ClassificationRuleResponse:
+    """Update an existing classification rule.
+
+    Args:
+        rule_id: Firestore document ID of the rule to update.
+        rule: ClassificationRule with updated description and manual_category.
+        firestore: Injected FirestoreService dependency.
+
+    Returns:
+        ClassificationRuleResponse with the updated rule.
+
+    Raises:
+        HTTPException: 500 if the Firestore update fails.
+    """
+    try:
+        firestore.update_rule(rule_id, rule.model_dump())
+        return ClassificationRuleResponse(
+            id=rule_id,
+            description=rule.description,
+            manual_category=rule.manual_category,
+        )
+    except FirestoreServiceError as exc:
+        logger.error("Failed to update classification rule '%s': %s", rule_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update rule: {exc}",
+        ) from exc
+
+
+@router.delete(
+    "/classification-rules/{rule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a classification rule",
+    description="Deletes a classification rule by its Firestore document ID.",
+)
+def delete_classification_rule(
+    rule_id: str,
+    firestore: FirestoreService = Depends(get_firestore_service),
+) -> None:
+    """Delete a classification rule.
+
+    Args:
+        rule_id: Firestore document ID of the rule to delete.
+        firestore: Injected FirestoreService dependency.
+
+    Raises:
+        HTTPException: 500 if the Firestore deletion fails.
+    """
+    try:
+        firestore.delete_rule(rule_id)
+    except FirestoreServiceError as exc:
+        logger.error("Failed to delete classification rule '%s': %s", rule_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete rule: {exc}",
+        ) from exc
