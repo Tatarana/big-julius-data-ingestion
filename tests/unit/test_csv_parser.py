@@ -88,33 +88,17 @@ class TestParseCsvContent:
         assert len(records) == 1
         assert records[0].value == 75.00
 
-    def test_outros_category_sets_pending_review_status(self):
-        """Should set classification_review_status to 'pending' for 'outros' category."""
-        csv_data = (
-            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date|payment_date\n"
-            b"10.0|2024-01-01|Test|1/1|outros|b|doc|own|date|date\n"
-        )
-        records = parse_csv_content(csv_data, "test.csv")
-        assert len(records) == 1
-        assert records[0].classification_review_status == "pending"
-
-    def test_outros_case_insensitive_sets_pending(self):
-        """Should handle 'Outros' case-insensitively."""
-        csv_data = (
-            b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date|payment_date\n"
-            b"10.0|2024-01-01|Test|1/1|Outros|b|doc|own|date|date\n"
-        )
-        records = parse_csv_content(csv_data, "test.csv")
-        assert records[0].classification_review_status == "pending"
-
-    def test_non_outros_category_has_no_review_status(self):
-        """Should leave classification_review_status as None for non-outros categories."""
+    def test_all_new_records_get_pending_review_status(self):
+        """Should set classification_review_status to 'pending' for all new records."""
         csv_data = (
             b"amount|date|description|installments|category|bank|doc_type|owner|extraction_date|payment_date\n"
             b"10.0|2024-01-01|Test|1/1|Food|b|doc|own|date|date\n"
+            b"20.0|2024-01-02|Test2|1/1|outros|b|doc|own|date|date\n"
         )
         records = parse_csv_content(csv_data, "test.csv")
-        assert records[0].classification_review_status is None
+        assert len(records) == 2
+        assert records[0].classification_review_status == "pending"
+        assert records[1].classification_review_status == "pending"
 
     def test_settlement_period_credit_card_installments(self):
         """Credit card installment 3/5 with date 2024-01-15 should settle in 03-2024."""

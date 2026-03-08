@@ -86,9 +86,7 @@ def parse_csv_content(content: bytes, source_file: str) -> List[Transaction]:
             payment_date = _normalize_date_to_ddmmyyyy(payment_date_raw) if payment_date_raw else None
 
             category = normalized_row.get("category")
-            classification_review_status = (
-                "pending" if category and category.strip().lower() == "outros" else None
-            )
+            classification_review_status = "pending"
 
             settlement_period = _calculate_settlement_period(
                 normalized_row["date"],
