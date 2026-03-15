@@ -155,6 +155,58 @@ class FirestoreService:
         docs = self._client.collection(self._rules_collection).stream()
         return [{"_doc_id": doc.id, **doc.to_dict()} for doc in docs]
 
+    def search_rules(
+        self,
+        description: Optional[str] = None,
+        category: Optional[str] = None,
+        subcategory: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Search for classification rules using 'contains' logic (case-insensitive).
+
+        Args:
+            description: Partial match for the description.
+            category: Partial match for the manual_category.
+            subcategory: Partial match for the manual_subcategory.
+
+        Returns:
+            A filter list of classification rules.
+        """
+        all_rules = self.get_all_rules()
+        filtered = []
+
+        desc_q = description.lower() if description else None
+        cat_q = category.lower() if category else None
+        sub_q = subcategory.lower() if subcategory else None
+
+        for rule in all_rules:
+            # Check description
+            if desc_q and desc_q not in rule.get("description", "").lower():
+                continue
+            # Check category
+            if cat_q and cat_q not in rule.get("manual_category", "").lower():
+                continue
+            # Check subcategory
+            if sub_q and sub_q not in rule.get("manual_subcategory", "").lower():
+                continue
+            
+            filtered.append(rule)
+
+        return filtered
+
+    def get_rule(self, doc_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve a single classification rule by its ID.
+
+        Args:
+            doc_id: Firestore document ID.
+
+        Returns:
+            The rule data as a dict (with _doc_id), or None if not found.
+        """
+        doc = self._client.collection(self._rules_collection).document(doc_id).get()
+        if not doc.exists:
+            return None
+        return {"_doc_id": doc.id, **doc.to_dict()}
+
     def add_rule(self, rule: Dict[str, Any]) -> str:
         """Insert a new classification rule.
 

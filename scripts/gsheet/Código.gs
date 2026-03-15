@@ -7,19 +7,19 @@ const DATABASE_NAME   = 'big-julius-firestore' // nome do database
 
 // Ordem das colunas na planilha
 const HEADERS = [
-  'bank', 'category', 'date', 'description',
+  'bank', 'category', 'subcategory', 'date', 'description',
   'doc_type', 'installment', 'owner', 'payment_date',
   'settlement_period', 'value', 'extraction_date', 'source_file'
 ];
 
 // Campos ignorados na deduplicação (conforme solicitado)
-const DEDUP_EXCLUDE = ['category', 'payment_date', 'settlement_period', 'extraction_date', 'source_file'];
+const DEDUP_EXCLUDE = ['category', 'subcategory', 'payment_date', 'settlement_period', 'extraction_date', 'source_file'];
 const DEDUP_FIELDS  = HEADERS.filter(h => !DEDUP_EXCLUDE.includes(h));
 // → ['bank', 'date', 'description', 'doc_type', 'installment', 'owner', 'value']
 
 
 // ============================================================
-// 🚀 PONTO DE ENTRADA — será chamado pelo botão
+// 🚀 IMPORTAR MÊS ÚNICO — prompt simples
 // ============================================================
 function importFirestoreData() {
   const ui = SpreadsheetApp.getUi();
@@ -34,11 +34,11 @@ function importFirestoreData() {
 
   const input = response.getResponseText().trim();
 
-const parts = input.split('/');
-  const validFormat = parts.length === 2 
-    && parts[0].length === 2 
-    && parts[1].length === 4 
-    && !isNaN(parts[0]) 
+  const parts = input.split('/');
+  const validFormat = parts.length === 2
+    && parts[0].length === 2
+    && parts[1].length === 4
+    && !isNaN(parts[0])
     && !isNaN(parts[1]);
 
   if (!validFormat) {
@@ -47,27 +47,68 @@ const parts = input.split('/');
   }
 
   const [month, year] = input.split('/');
+  const months = [{ month, year }];
+  runImport_(months, `${month}/${year}`);
+}
+
+
+// ============================================================
+// 📆 IMPORTAR POR PERÍODO — diálogo com combos de mês/ano
+// ============================================================
+function importFirestoreByRange() {
+  const html = HtmlService
+    .createHtmlOutput(buildRangeDialogHtml_())
+    .setWidth(420)
+    .setHeight(340);
+  SpreadsheetApp.getUi().showModalDialog(html, '📆 Importar por período');
+}
+
+
+// ============================================================
+// 🔧 HANDLER chamado pelo diálogo HTML
+// ============================================================
+function processRangeImport(startMonth, startYear, endMonth, endYear) {
+  const months = generateMonthList_(startMonth, startYear, endMonth, endYear);
+
+  if (months.length === 0) {
+    return '❌ Período inválido: a data de início deve ser anterior ou igual à de fim.';
+  }
+
+  const label = `${startMonth}/${startYear} a ${endMonth}/${endYear}`;
+  return runImport_(months, label);
+}
+
+
+// ============================================================
+// 🚀 EXECUÇÃO COMUM DE IMPORTAÇÃO (usada por ambos os modos)
+// ============================================================
+function runImport_(monthList, label) {
+  const ui = SpreadsheetApp.getUi();
 
   try {
-    ui.alert(`⏳ Buscando registros de ${month}/${year}...\\n\\nClique OK e aguarde. A planilha será atualizada automaticamente.`);
-
-    const token     = getAccessToken();
-    const allDocs   = fetchAllDocuments(token);
-    const filtered  = filterByMonthYear(allDocs, month, year);
+    const token    = getAccessToken();
+    const allDocs  = fetchAllDocuments(token);
+    const filtered = filterByDateRange(allDocs, monthList);
 
     if (filtered.length === 0) {
-      ui.alert(`ℹ️ Nenhum registro encontrado para ${month}/${year}.`);
-      return;
+      const msg = `ℹ️ Nenhum registro encontrado para ${label}.`;
+      ui.alert(msg);
+      return msg;
     }
 
     const inserted = writeToSheet(filtered);
-    ui.alert(`✅ Concluído!\\n\\n📦 Encontrados: ${filtered.length}\\n✨ Inseridos (novos): ${inserted}\\n⏭️ Ignorados (duplicatas): ${filtered.length - inserted}`);
+    const msg = `✅ Concluído!\n\n📦 Encontrados: ${filtered.length}\n✨ Inseridos (novos): ${inserted}\n⏭️ Ignorados (duplicatas): ${filtered.length - inserted}`;
+    ui.alert(msg);
+    return msg;
 
   } catch (e) {
-    ui.alert('❌ Erro durante a importação:\\n\\n' + e.message);
+    const msg = '❌ Erro durante a importação:\n\n' + e.message;
+    ui.alert(msg);
     Logger.log(e.stack || e.message);
+    return msg;
   }
 }
+
 
 function getAccessToken() {
   return ScriptApp.getOAuthToken();
@@ -108,17 +149,20 @@ function fetchAllDocuments(token) {
 
 
 // ============================================================
-// 📅 FILTRA DOCUMENTOS PELO MÊS/ANO
+// 📅 FILTRA DOCUMENTOS POR UMA LISTA DE MESES
 //    Cartão de crédito → usa payment_date
 //    Conta corrente    → usa date (não possui payment_date)
 // ============================================================
-function filterByMonthYear(documents, month, year) {
+function filterByDateRange(documents, monthList) {
+  // Monta Set de chaves "MM-YYYY" para busca rápida
+  const validPeriods = new Set(monthList.map(m => `${m.month}-${m.year}`));
+
   return documents.filter(doc => {
     const fields      = doc.fields || {};
-    const paymentDate = extractValue(fields['payment_date']); // "DD-MM-YYYY" ou vazio
+    const paymentDate = extractValue(fields['payment_date']);
     const dateStr     = (paymentDate && typeof paymentDate === 'string')
                           ? paymentDate
-                          : extractValue(fields['date']);      // fallback p/ conta corrente
+                          : extractValue(fields['date']);
 
     if (!dateStr || typeof dateStr !== 'string') return false;
 
@@ -126,8 +170,33 @@ function filterByMonthYear(documents, month, year) {
     if (parts.length !== 3) return false;
 
     const [, mm, yyyy] = parts;
-    return mm === month && yyyy === year;
+    return validPeriods.has(`${mm}-${yyyy}`);
   });
+}
+
+
+// ============================================================
+// 📆 GERA LISTA DE MESES ENTRE INÍCIO E FIM (inclusive)
+// ============================================================
+function generateMonthList_(startMonth, startYear, endMonth, endYear) {
+  const sm = parseInt(startMonth, 10);
+  const sy = parseInt(startYear, 10);
+  const em = parseInt(endMonth, 10);
+  const ey = parseInt(endYear, 10);
+
+  const list = [];
+  let m = sm, y = sy;
+
+  while (y < ey || (y === ey && m <= em)) {
+    list.push({
+      month: String(m).padStart(2, '0'),
+      year:  String(y)
+    });
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+
+  return list;
 }
 
 
@@ -303,9 +372,99 @@ function testeSimples() {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🔥 Firestore')
-    .addItem('Importar por mês...', 'importFirestoreData')
+    .addItem('📅 Importar mês único...', 'importFirestoreData')
+    .addItem('📆 Importar período...', 'importFirestoreByRange')
     .addToUi();
 }
+
+
+// ============================================================
+// 🎨 HTML DO DIÁLOGO DE SELEÇÃO POR PERÍODO
+// ============================================================
+function buildRangeDialogHtml_() {
+  const currentYear  = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+  const years = [];
+  for (let y = currentYear - 3; y <= currentYear + 1; y++) years.push(y);
+
+  const monthNames = [
+    'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
+  ];
+
+  const monthOpts = monthNames.map((name, i) => {
+    const val = String(i + 1).padStart(2, '0');
+    const sel = (i + 1 === currentMonth) ? ' selected' : '';
+    return '<option value="' + val + '"' + sel + '>' + val + ' - ' + name + '</option>';
+  }).join('');
+
+  const yearOpts = years.map(y => {
+    const sel = (y === currentYear) ? ' selected' : '';
+    return '<option value="' + y + '"' + sel + '>' + y + '</option>';
+  }).join('');
+
+  return '\
+    <style>\
+      * { box-sizing: border-box; font-family: "Google Sans", Arial, sans-serif; }\
+      body { margin: 0; padding: 20px; background: #f8f9fa; color: #202124; }\
+      h3 { margin: 0 0 6px; font-size: 14px; color: #5f6368; }\
+      .row { display: flex; gap: 10px; margin-bottom: 16px; }\
+      select {\
+        flex: 1; padding: 8px 10px; border: 1px solid #dadce0;\
+        border-radius: 8px; font-size: 14px; background: #fff;\
+        cursor: pointer;\
+      }\
+      select:focus { outline: none; border-color: #1a73e8; }\
+      .actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }\
+      button {\
+        padding: 10px 24px; border: none; border-radius: 8px;\
+        font-size: 14px; font-weight: 500; cursor: pointer;\
+      }\
+      .btn-primary { background: #1a73e8; color: #fff; }\
+      .btn-primary:hover { background: #1557b0; }\
+      .btn-cancel { background: #e8eaed; color: #3c4043; }\
+      .btn-cancel:hover { background: #d2d5d9; }\
+      #status { margin-top: 14px; font-size: 13px; color: #5f6368; text-align: center; }\
+      .separator { border-top: 1px solid #e0e0e0; margin: 4px 0 16px; }\
+    </style>\
+    <h3>🟢 Início</h3>\
+    <div class="row">\
+      <select id="sm">' + monthOpts + '</select>\
+      <select id="sy">' + yearOpts + '</select>\
+    </div>\
+    <div class="separator"></div>\
+    <h3>🔴 Fim</h3>\
+    <div class="row">\
+      <select id="em">' + monthOpts + '</select>\
+      <select id="ey">' + yearOpts + '</select>\
+    </div>\
+    <div class="actions">\
+      <button class="btn-cancel" onclick="google.script.host.close()">Cancelar</button>\
+      <button class="btn-primary" id="btnImport" onclick="doImport()">Importar</button>\
+    </div>\
+    <div id="status"></div>\
+    <script>\
+      function doImport() {\
+        var sm = document.getElementById("sm").value;\
+        var sy = document.getElementById("sy").value;\
+        var em = document.getElementById("em").value;\
+        var ey = document.getElementById("ey").value;\
+        document.getElementById("btnImport").disabled = true;\
+        document.getElementById("status").textContent = "⏳ Importando, aguarde...";\
+        google.script.run\
+          .withSuccessHandler(function(msg) {\
+            document.getElementById("status").textContent = msg || "Concluído!";\
+            document.getElementById("btnImport").disabled = false;\
+          })\
+          .withFailureHandler(function(err) {\
+            document.getElementById("status").textContent = "❌ " + err.message;\
+            document.getElementById("btnImport").disabled = false;\
+          })\
+          .processRangeImport(sm, sy, em, ey);\
+      }\
+    </script>';
+}
+
 
 function diagnosticarPrivateKey() {
   const props  = PropertiesService.getScriptProperties();

@@ -34,6 +34,7 @@ class Transaction(BaseModel):
         description="Settlement period in MM-YYYY format. Calculated from date and installment for credit card transactions.",
     )
     category: Optional[str] = Field(None, description="Transaction category.")
+    subcategory: Optional[str] = Field(None, description="Transaction subcategory.")
     classification_review_status: Optional[str] = Field(
         None,
         description="Review status: 'pending' for outros, 'reviewed' after check, None otherwise.",
@@ -65,6 +66,17 @@ class ClassificationRule(BaseModel):
 
     description: str = Field(..., description="Text pattern to match in transaction descriptions.")
     manual_category: str = Field(..., description="Category to assign on match.")
+    manual_subcategory: Optional[str] = Field(None, description="Subcategory to assign on match.")
+
+
+class ClassificationRuleUpdate(BaseModel):
+    """Model for updating an existing classification rule.
+    All fields are optional to support partial updates.
+    """
+
+    description: Optional[str] = Field(None, description="Text pattern to match in transaction descriptions.")
+    manual_category: Optional[str] = Field(None, description="Category to assign on match.")
+    manual_subcategory: Optional[str] = Field(None, description="Subcategory to assign on match.")
 
 
 class ClassificationRuleResponse(BaseModel):
@@ -79,6 +91,7 @@ class ClassificationRuleResponse(BaseModel):
     id: str = Field(..., description="Firestore document ID.")
     description: str = Field(..., description="Text pattern to match in transaction descriptions.")
     manual_category: str = Field(..., description="Category to assign on match.")
+    manual_subcategory: Optional[str] = Field(None, description="Subcategory to assign on match.")
 
 
 class IngestionResponse(BaseModel):

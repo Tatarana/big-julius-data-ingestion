@@ -1,0 +1,72 @@
+Unique combinations of Category | Subcategory:
+---------------------------------------------
+Beleza | Barbearia
+Beleza | Cabelereiro
+Beleza | Depilação
+Beleza | Fórmula Dermatológica
+Cashback | Reembolso
+Compras | Assinaturas
+Compras | Dança
+Compras | Entretenimento
+Compras | Jóias
+Compras | Online
+Compras | Papelaria
+Compras | Serviços em Nuvem
+Compras | Supermercado
+Compras | Varejo
+Compras | Vestuário
+Contas da Casa | Condomínio
+Contas da Casa | Gás
+Contas da Casa | Limpeza
+Contas da Casa | Luz
+Doação | AeG
+Educação | Ensino Superior
+Educação | Inglês
+Educação | Nihongo
+Educação | Outros
+Entretenimento | Dança
+Imposto | IOF
+Imposto | IPTU
+Informativo | Informativo do Cartão de Crédito
+Informativo | Pagamento Cartão de Crédito
+Informativo | Pagamento Cartão de Crédito (Mínimo)
+Investimento | Aplicações
+Investimento | Rendimento
+Mercado | Supermercado
+Pets | Pet Shop
+Pets | Ração & Tapete
+Reembolsável | Condomínio Lucy
+Reembolsável | Escritório Sheila
+Reembolsável | Joyce
+Reembolsável | Socorro
+Resgate Investimento | Outros
+Restaurante | Alimentação
+Restaurante | Delivery
+Restaurante | Entretenimento
+Restaurante | Refeição
+Saque | Outros
+Saúde | Academia
+Saúde | Consulta
+Saúde | Consulta Médica
+Saúde | Dentista
+Saúde | Medicamento
+Saúde | Outros
+Saúde | Ótica
+Taxas Bancárias | Atraso Pgto Cartão
+Taxas Bancárias | Juros Limite de Conta
+Taxas Bancárias | Pacote de Tarifas
+Telecom | Internet/Telefonia
+Transporte | Combustível
+Transporte | Estacionamento
+Transporte | Imposto
+Transporte | Limpeza
+Transporte | Manutenção
+Transporte | Metrô
+Transporte | Pedágio
+Transporte | Pedágio/Tag
+Transporte | Seguros
+Transporte | Uber
+Viagem | Aluguel de Carro
+Viagem | Hotel
+Viagem | Outros
+Viagem | Passagem Aérea

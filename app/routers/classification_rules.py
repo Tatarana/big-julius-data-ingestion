@@ -1,12 +1,13 @@
 """Router for the /classification-rules endpoints."""
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.models.transaction import (
     ClassificationRule,
+    ClassificationRuleUpdate,
     ClassificationRuleResponse,
 )
 from app.services.firestore_service import (
@@ -74,6 +75,7 @@ def add_classification_rule(
             id=doc_id,
             description=rule.description,
             manual_category=rule.manual_category,
+            manual_subcategory=rule.manual_subcategory,
         )
     except FirestoreServiceError as exc:
         logger.error("Failed to add classification rule: %s", exc, exc_info=True)
@@ -107,6 +109,43 @@ def list_classification_rules(
             id=r["_doc_id"],
             description=r["description"],
             manual_category=r["manual_category"],
+            manual_subcategory=r.get("manual_subcategory"),
+        )
+        for r in rules
+    ]
+
+
+@router.get(
+    "/classification-rules/search",
+    response_model=List[ClassificationRuleResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Search classification rules",
+    description="Search for rules by description, category, or subcategory using 'contains' logic.",
+)
+def search_classification_rules(
+    description: Optional[str] = None,
+    category: Optional[str] = None,
+    subcategory: Optional[str] = None,
+    firestore: FirestoreService = Depends(get_firestore_service),
+) -> List[ClassificationRuleResponse]:
+    """Search classification rules.
+
+    Args:
+        description: Partial match for description.
+        category: Partial match for manual_category.
+        subcategory: Partial match for manual_subcategory.
+        firestore: Injected FirestoreService dependency.
+
+    Returns:
+        Filtered list of ClassificationRuleResponse objects.
+    """
+    rules = firestore.search_rules(description, category, subcategory)
+    return [
+        ClassificationRuleResponse(
+            id=r["_doc_id"],
+            description=r["description"],
+            manual_category=r["manual_category"],
+            manual_subcategory=r.get("manual_subcategory"),
         )
         for r in rules
     ]
@@ -121,29 +160,52 @@ def list_classification_rules(
 )
 def update_classification_rule(
     rule_id: str,
-    rule: ClassificationRule,
+    rule_update: ClassificationRuleUpdate,
     firestore: FirestoreService = Depends(get_firestore_service),
 ) -> ClassificationRuleResponse:
-    """Update an existing classification rule.
+    """Update an existing classification rule (partial update).
 
     Args:
         rule_id: Firestore document ID of the rule to update.
-        rule: ClassificationRule with updated description and manual_category.
+        rule_update: Fields to update.
         firestore: Injected FirestoreService dependency.
 
     Returns:
-        ClassificationRuleResponse with the updated rule.
+        ClassificationRuleResponse with the updated rule state.
 
     Raises:
+        HTTPException: 400 if no fields are provided.
+        HTTPException: 404 if the rule is not found.
         HTTPException: 500 if the Firestore update fails.
     """
+    update_data = rule_update.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one field must be provided for update.",
+        )
+
     try:
-        firestore.update_rule(rule_id, rule.model_dump())
+        # Check if rule exists
+        existing = firestore.get_rule(rule_id)
+        if not existing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Classification rule with ID {rule_id} not found.",
+            )
+
+        firestore.update_rule(rule_id, update_data)
+        
+        # Get updated rule to return full response
+        updated = firestore.get_rule(rule_id)
         return ClassificationRuleResponse(
             id=rule_id,
-            description=rule.description,
-            manual_category=rule.manual_category,
+            description=updated["description"],
+            manual_category=updated["manual_category"],
+            manual_subcategory=updated.get("manual_subcategory"),
         )
+    except HTTPException:
+        raise
     except FirestoreServiceError as exc:
         logger.error("Failed to update classification rule '%s': %s", rule_id, exc, exc_info=True)
         raise HTTPException(

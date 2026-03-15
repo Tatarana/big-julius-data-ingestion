@@ -3,6 +3,7 @@
 import csv
 import io
 import logging
+import unicodedata
 from typing import List, Optional
 
 from app.models.transaction import Transaction
@@ -54,7 +55,7 @@ def parse_csv_content(content: bytes, source_file: str) -> List[Transaction]:
     for i, row in enumerate(reader, start=2):  # row 1 is the header
         # Normalize keys
         normalized_row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
-        description = normalized_row.get("description", "")
+        description = _normalize_homoglyphs(normalized_row.get("description", ""))
 
         # Skip specific records requested by the user
         if "RECONCILIATION_DIFFERENCE" in description.upper():
@@ -97,7 +98,7 @@ def parse_csv_content(content: bytes, source_file: str) -> List[Transaction]:
             transaction = Transaction(
                 value=value,
                 date=normalized_row["date"],
-                description=normalized_row["description"],
+                description=description,
                 installment=normalized_row["installments"],
                 bank=bank,
                 doc_type=doc_type,
@@ -213,3 +214,71 @@ def _normalize_date_to_ddmmyyyy(date_str: str) -> str:
         return f"{parts[2]}-{parts[1]}-{parts[0]}"
 
     return stripped
+
+
+# Greek and Cyrillic characters that look identical to Latin letters.
+# PDF extraction (e.g. Vertex AI) sometimes produces these instead of Latin.
+_HOMOGLYPH_TABLE = str.maketrans({
+    # Greek uppercase
+    '\u0391': 'A',  # Α → A
+    '\u0392': 'B',  # Β → B
+    '\u0395': 'E',  # Ε → E
+    '\u0396': 'Z',  # Ζ → Z
+    '\u0397': 'H',  # Η → H
+    '\u0399': 'I',  # Ι → I
+    '\u039A': 'K',  # Κ → K
+    '\u039C': 'M',  # Μ → M
+    '\u039D': 'N',  # Ν → N
+    '\u039F': 'O',  # Ο → O
+    '\u03A1': 'P',  # Ρ → P
+    '\u03A4': 'T',  # Τ → T
+    '\u03A5': 'Y',  # Υ → Y
+    '\u03A7': 'X',  # Χ → X
+    # Greek lowercase
+    '\u03B1': 'a',  # α → a
+    '\u03B5': 'e',  # ε → e
+    '\u03B9': 'i',  # ι → i
+    '\u03BA': 'k',  # κ → k
+    '\u03BD': 'v',  # ν → v
+    '\u03BF': 'o',  # ο → o
+    '\u03C1': 'p',  # ρ → p
+    '\u03C4': 't',  # τ → t
+    '\u03C5': 'u',  # υ → u
+    '\u03C7': 'x',  # χ → x
+    # Cyrillic uppercase
+    '\u0410': 'A',  # А → A
+    '\u0412': 'B',  # В → B
+    '\u0415': 'E',  # Е → E
+    '\u041A': 'K',  # К → K
+    '\u041C': 'M',  # М → M
+    '\u041D': 'H',  # Н → H
+    '\u041E': 'O',  # О → O
+    '\u0420': 'P',  # Р → P
+    '\u0421': 'C',  # С → C
+    '\u0422': 'T',  # Т → T
+    '\u0425': 'X',  # Х → X
+    '\u0423': 'Y',  # У → Y
+    # Cyrillic lowercase
+    '\u0430': 'a',  # а → a
+    '\u0435': 'e',  # е → e
+    '\u043E': 'o',  # о → o
+    '\u0440': 'p',  # р → p
+    '\u0441': 'c',  # с → c
+    '\u0445': 'x',  # х → x
+})
+
+
+def _normalize_homoglyphs(text: str) -> str:
+    """Replace common Greek/Cyrillic lookalike characters with Latin equivalents.
+
+    PDF extraction tools sometimes produce visually identical but Unicode-different
+    characters (e.g. Greek Ο instead of Latin O). This function normalizes them
+    so that string comparisons work correctly.
+
+    Args:
+        text: Input string that may contain homoglyphs.
+
+    Returns:
+        String with homoglyphs replaced by their Latin equivalents.
+    """
+    return text.translate(_HOMOGLYPH_TABLE)

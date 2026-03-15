@@ -178,18 +178,28 @@ class IngestionService:
                     break  # First match is the longest due to sorting
 
             if matched_rule:
-                self._firestore.update_transaction(doc_id, {
+                updates = {
                     "category": matched_rule["manual_category"],
                     "classification_review_status": "reviewed",
-                })
+                }
+                if matched_rule.get("manual_subcategory"):
+                    updates["subcategory"] = matched_rule["manual_subcategory"]
+                self._firestore.update_transaction(doc_id, updates)
                 reclassified += 1
                 logger.debug(
-                    "Reclassified transaction '%s': '%s' -> '%s'",
+                    "Reclassified transaction '%s': '%s' -> '%s/%s'",
                     doc_id,
                     txn.get("description"),
                     matched_rule["manual_category"],
+                    matched_rule.get("manual_subcategory", ""),
                 )
             else:
+                logger.warning(
+                    "No rule matched transaction '%s': description=%r (lowered=%r)",
+                    doc_id,
+                    txn.get("description"),
+                    txn_description,
+                )
                 self._firestore.update_transaction(doc_id, {
                     "classification_review_status": "reviewed",
                 })
